@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="霸總背單字">
+<meta name="theme-color" content="#1a0a0f">
+<link rel="manifest" id="pwa-manifest">
+<title>霸總文背單字</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a0a0f; min-height: 100vh; min-height: 100dvh;
+  font-family: 'Lato', sans-serif; color: #f0e6d3;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.header {
+  background: linear-gradient(180deg, #2d0d1a 0%, #1a0a0f 100%);
+  text-align: center; padding: 2rem 1.5rem 1.5rem;
+  border-bottom: 1px solid #5a1a2e44;
+}
+.title {
+  font-family: 'Noto Serif TC', serif; font-size: 28px; font-weight: 700;
+  background: linear-gradient(135deg, #d4a855, #f0c87a, #c4924a);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  letter-spacing: 3px; margin-bottom: 6px;
+}
+.subtitle { font-size: 12px; color: #9c6a7a; letter-spacing: 1.5px; }
+.lang-switch { display: flex; justify-content: center; gap: 0; margin-top: 14px; }
+.lang-btn {
+  background: #2d0d1a; border: 1px solid #5a1a2e; color: #9c6a7a;
+  padding: 8px 24px; font-size: 14px; cursor: pointer;
+  font-family: 'Noto Serif TC', serif; transition: all 0.2s;
+}
+.lang-btn:first-child { border-radius: 20px 0 0 20px; }
+.lang-btn:last-child { border-radius: 0 20px 20px 0; border-left: none; }
+.lang-btn.active { background: #8b1a3a; border-color: #c4254f; color: #f0c87a; }
+
+.nav-tabs {
+  display: flex; border-bottom: 1px solid #5a1a2e44; padding: 0 1.5rem;
+  background: #1a0a0f; position: sticky; top: 0; z-index: 10;
+}
+.nav-tab {
+  padding: 14px 18px; font-size: 14px; color: #9c6a7a; cursor: pointer;
+  border-bottom: 2px solid transparent; font-family: 'Noto Serif TC', serif; transition: all 0.2s;
+}
+.nav-tab.active { color: #f0c87a; border-bottom-color: #f0c87a; }
+
+.controls { padding: 1.5rem; display: flex; flex-direction: column; gap: 14px; max-width: 700px; margin: 0 auto; }
+.control-row { display: flex; gap: 10px; }
+.styled-select {
+  flex: 1; background: #2d0d1a; border: 1px solid #5a1a2e; color: #f0e6d3;
+  padding: 11px 14px; border-radius: 8px; font-size: 14px;
+  font-family: 'Noto Serif TC', serif; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239c6a7a' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; cursor: pointer;
+}
+.styled-select:focus { outline: none; border-color: #8b3050; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.scene-tag {
+  background: #2d0d1a; border: 1px solid #5a1a2e88; color: #c4859a;
+  padding: 7px 14px; border-radius: 20px; font-size: 13px; cursor: pointer;
+  transition: all 0.2s; font-family: 'Noto Serif TC', serif;
+}
+.scene-tag:hover, .scene-tag.active { background: #5a1a2e; border-color: #8b3050; color: #f0c87a; }
+.btn-generate {
+  background: linear-gradient(135deg, #8b1a3a, #c4254f); border: none; color: #f0e6d3;
+  padding: 13px 20px; border-radius: 8px; font-size: 15px; font-family: 'Noto Serif TC', serif;
+  cursor: pointer; font-weight: 700; letter-spacing: 1px; transition: opacity 0.2s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-generate:hover { opacity: 0.85; }
+.btn-generate:active { transform: scale(0.97); }
+.btn-generate:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.api-section { background: #231018; border: 1px solid #5a1a2e66; border-radius: 10px; padding: 14px 16px; }
+.api-label { font-size: 12px; color: #9c6a7a; margin-bottom: 8px; font-family: 'Noto Serif TC', serif; }
+.api-row { display: flex; gap: 8px; }
+.api-input {
+  flex: 1; background: #1a0a0f; border: 1px solid #5a1a2e; color: #f0e6d3;
+  padding: 9px 12px; border-radius: 6px; font-size: 13px; font-family: monospace;
+}
+.api-input:focus { outline: none; border-color: #8b3050; }
+.btn-save-key {
+  background: #3d1a28; border: 1px solid #5a1a2e; color: #c4859a;
+  padding: 9px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  font-family: 'Noto Serif TC', serif; white-space: nowrap; transition: all 0.2s;
+}
+.btn-save-key:hover { background: #5a1a2e; color: #f0c87a; }
+.key-status { font-size: 12px; margin-top: 6px; color: #6a3a4a; }
+.key-status.ok { color: #4a8b4a; }
+
+.story-area { padding: 0 1.5rem 2rem; max-width: 700px; margin: 0 auto; }
+.loading-state { text-align: center; padding: 4rem 1rem; color: #9c6a7a; font-size: 15px; font-family: 'Noto Serif TC', serif; }
+.loading-dots::after { content: ''; animation: dots 1.5s infinite; }
+@keyframes dots { 0%,20%{content:''} 40%{content:'·'} 60%{content:'··'} 80%,100%{content:'···'} }
+
+.story-box {
+  background: #231018; border: 1px solid #5a1a2e44; border-radius: 12px;
+  padding: 1.8rem; line-height: 2.6; font-size: 16px;
+  font-family: 'Noto Serif TC', serif; color: #e8d5c4;
+}
+.word-pill {
+  display: inline; background: #5a1a2e; border: 1px solid #8b3050; color: #f0c87a;
+  padding: 2px 9px; border-radius: 4px; font-weight: 700; font-style: normal;
+  font-size: 15px; white-space: nowrap;
+}
+.word-reading { display: inline; color: #c4859a; font-size: 11px; vertical-align: super; }
+.word-def { display: inline; color: #9c6a7a; font-size: 13px; }
+
+.vocab-list { margin-top: 1.5rem; padding: 1.5rem; background: #1f0d14; border: 1px solid #5a1a2e33; border-radius: 12px; }
+.vocab-title { font-family: 'Noto Serif TC', serif; font-size: 13px; color: #9c6a7a; margin-bottom: 14px; letter-spacing: 1px; }
+.vocab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.vocab-card { background: #2d0d1a; border: 1px solid #5a1a2e66; border-radius: 8px; padding: 11px 13px; }
+.vocab-en { font-size: 15px; font-weight: 700; color: #f0c87a; margin-bottom: 2px; }
+.vocab-reading { font-size: 11px; color: #c4859a; margin-bottom: 2px; }
+.vocab-zh { font-size: 12px; color: #9c6a7a; }
+
+.notion-area {
+  margin-top: 1.5rem; padding: 1.2rem 1.5rem; background: #1f0d14;
+  border: 1px solid #5a1a2e33; border-radius: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.notion-hint { font-size: 13px; color: #9c6a7a; font-family: 'Noto Serif TC', serif; line-height: 1.6; }
+.btn-copy {
+  background: #3d1a28; border: 1px solid #5a1a2e; color: #c4859a;
+  padding: 9px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  font-family: 'Noto Serif TC', serif; white-space: nowrap; transition: all 0.2s; flex-shrink: 0;
+}
+.btn-copy:hover { background: #5a1a2e; color: #f0c87a; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.progress-bar-wrap { background: #2d0d1a; border-radius: 20px; height: 4px; margin: 1.2rem auto 0.5rem; max-width: 700px; padding: 0 1.5rem; }
+.progress-bar { height: 4px; background: linear-gradient(90deg, #c4254f, #f0c87a); border-radius: 20px; transition: width 0.4s ease; }
+.quiz-score { text-align: center; font-size: 12px; color: #9c6a7a; margin-bottom: 1rem; }
+.quiz-mode { padding: 0 1.5rem 2rem; max-width: 700px; margin: 0 auto; }
+.quiz-card { background: #231018; border: 1px solid #5a1a2e; border-radius: 12px; padding: 2rem 1.5rem; text-align: center; }
+.quiz-word { font-size: 32px; font-weight: 700; color: #f0c87a; margin-bottom: 0.5rem; letter-spacing: 1px; }
+.quiz-reading { font-size: 16px; color: #c4859a; margin-bottom: 0.8rem; }
+.quiz-context { font-size: 14px; color: #9c6a7a; margin-bottom: 1.8rem; font-family: 'Noto Serif TC', serif; }
+.quiz-options { display: flex; flex-direction: column; gap: 10px; }
+.quiz-btn {
+  background: #2d0d1a; border: 1px solid #5a1a2e; color: #e8d5c4;
+  padding: 14px 18px; border-radius: 8px; font-size: 15px; cursor: pointer;
+  font-family: 'Noto Serif TC', serif; text-align: left; transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.quiz-btn:active { background: #3d1020; }
+.quiz-btn.correct { background: #1a3d1a; border-color: #3d8b3d; color: #7ddb7d; pointer-events: none; }
+.quiz-btn.wrong { background: #3d1a1a; border-color: #8b3d3d; color: #db7d7d; pointer-events: none; }
+.empty-state { text-align: center; padding: 4rem 2rem; color: #5a2a3a; font-family: 'Noto Serif TC', serif; font-size: 15px; line-height: 2.2; }
+.jlpt-badge { display: inline-block; background: #3d1a28; border: 1px solid #8b3050; color: #f0c87a; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title" id="main-title">霸總文背單字</div>
+  <div class="subtitle" id="main-subtitle">用浪漫故事學英文 · Learn Vocabulary Through Romance</div>
+  <div class="lang-switch">
+    <button class="lang-btn active" id="btn-en" onclick="setLang('en')">🇺🇸 英文</button>
+    <button class="lang-btn" id="btn-jp" onclick="setLang('jp')">🇯🇵 日文</button>
+  </div>
+</div>
+
+<div class="nav-tabs">
+  <div class="nav-tab active" onclick="switchTab('story')">✦ 生成故事</div>
+  <div class="nav-tab" onclick="switchTab('quiz')">📝 測驗模式</div>
+</div>
+
+<div id="tab-story" class="tab-content active">
+  <div class="controls">
+    <div class="api-section">
+      <div class="api-label">🔑 Anthropic API Key（儲存於本機，不上傳）</div>
+      <div class="api-row">
+        <input type="password" class="api-input" id="api-key-input" placeholder="sk-ant-..." />
+        <button class="btn-save-key" onclick="saveKey()">儲存</button>
+      </div>
+      <div class="key-status" id="key-status">尚未設定 API Key</div>
+    </div>
+    <div class="control-row">
+      <select class="styled-select" id="hero-type">
+        <option value="冷酷總裁">冷酷總裁</option>
+        <option value="霸道校草">霸道校草</option>
+        <option value="腹黑律師">腹黑律師</option>
+        <option value="傲嬌醫生">傲嬌醫生</option>
+        <option value="神秘反派">神秘反派</option>
+        <option value="高冷教授">高冷教授</option>
+      </select>
+      <select class="styled-select" id="level">
+        <option value="初級">初級（國中）</option>
+        <option value="中級" selected>中級（高中）</option>
+        <option value="進階">進階（大學）</option>
+      </select>
+    </div>
+    <div class="control-row" id="domain-row">
+      <select class="styled-select" id="domain">
+        <option value="">✦ 一般詞彙</option>
+        <option value="建築設計">🏛 建築設計</option>
+        <option value="結構工程">⚙️ 結構工程</option>
+        <option value="室內設計">🛋 室內設計</option>
+        <option value="都市規劃">🏙 都市規劃</option>
+        <option value="專案管理">📋 專案管理</option>
+        <option value="材料工程">🧱 材料工程</option>
+      </select>
+    </div>
+    <div class="tag-row" id="scene-tags">
+      <div class="scene-tag active" data-scene="商業競爭、辦公室">商業辦公室</div>
+      <div class="scene-tag" data-scene="重逢、舊情人">久別重逢</div>
+      <div class="scene-tag" data-scene="豪宅、婚約">豪門婚約</div>
+      <div class="scene-tag" data-scene="復仇、誤會">復仇誤解</div>
+      <div class="scene-tag" data-scene="異國、旅行">異地邂逅</div>
+      <div class="scene-tag" data-scene="醫院、急診">急診室</div>
+      <div class="scene-tag" data-scene="古裝、皇宮">古裝宮廷</div>
+    </div>
+    <button class="btn-generate" onclick="generateStory()" id="gen-btn">✦ 生成故事</button>
+  </div>
+  <div class="story-area" id="story-area">
+    <div class="empty-state">輸入 API Key 後選擇霸總類型與場景<br>點擊生成故事開始學習 ✨</div>
+  </div>
+</div>
+
+<div id="tab-quiz" class="tab-content">
+  <div id="quiz-area" style="padding-top:1rem">
+    <div class="empty-state">先生成一篇故事<br>再來挑戰測驗吧 ♡</div>
+  </div>
+</div>
+
+<script>
+// PWA Manifest 動態注入
+const manifest = {
+  name: "霸總文背單字",
+  short_name: "霸總背單字",
+  description: "用霸總言情故事學英文和日文",
+  start_url: "./index.html",
+  display: "standalone",
+  background_color: "#1a0a0f",
+  theme_color: "#1a0a0f",
+  orientation: "portrait",
+  icons: [
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%231a0a0f'/%3E%3Ctext x='96' y='130' font-size='100' text-anchor='middle' fill='%23f0c87a'%3E♛%3C/text%3E%3C/svg%3E", sizes: "192x192", type: "image/svg+xml" },
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%231a0a0f'/%3E%3Ctext x='256' y='340' font-size='280' text-anchor='middle' fill='%23f0c87a'%3E♛%3C/text%3E%3C/svg%3E", sizes: "512x512", type: "image/svg+xml" }
+  ]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+const manifestURL = URL.createObjectURL(blob);
+document.getElementById('pwa-manifest').setAttribute('href', manifestURL);
+
+let currentWords = [], currentStoryText = '', selectedScene = '商業競爭、辦公室';
+let quizIndex = 0, quizScore = 0, currentLang = 'en';
+
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('anthropic_key');
+  if (saved) {
+    document.getElementById('api-key-input').value = saved;
+    document.getElementById('key-status').textContent = '✓ 已載入儲存的 Key';
+    document.getElementById('key-status').className = 'key-status ok';
+  }
+});
+
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('btn-en').classList.toggle('active', lang==='en');
+  document.getElementById('btn-jp').classList.toggle('active', lang==='jp');
+  if (lang === 'en') {
+    document.getElementById('main-title').textContent = '霸總文背單字';
+    document.getElementById('main-subtitle').textContent = '用浪漫故事學英文 · Learn Vocabulary Through Romance';
+    document.getElementById('domain-row').style.display = 'flex';
+    document.getElementById('level').innerHTML = `
+      <option value="初級">初級（國中）</option>
+      <option value="中級" selected>中級（高中）</option>
+      <option value="進階">進階（大學）</option>`;
+  } else {
+    document.getElementById('main-title').textContent = '霸総で日本語';
+    document.getElementById('main-subtitle').textContent = '用浪漫故事學日文 · 恋愛小説で単語を学ぶ';
+    document.getElementById('domain-row').style.display = 'none';
+    document.getElementById('level').innerHTML = `
+      <option value="N5">N5 入門</option>
+      <option value="N4" selected>N4（目前程度）</option>
+      <option value="N3">N3 挑戰</option>`;
+  }
+  document.getElementById('story-area').innerHTML = `<div class="empty-state">選擇霸總類型與場景<br>點擊生成故事開始學習 ✨</div>`;
+  currentWords = [];
+}
+
+document.querySelectorAll('.scene-tag').forEach(tag => {
+  tag.addEventListener('click', () => {
+    document.querySelectorAll('.scene-tag').forEach(t => t.classList.remove('active'));
+    tag.classList.add('active');
+    selectedScene = tag.dataset.scene;
+  });
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.nav-tab').forEach((t,i) => {
+    t.classList.toggle('active', (i===0&&tab==='story')||(i===1&&tab==='quiz'));
+  });
+  document.getElementById('tab-story').classList.toggle('active', tab==='story');
+  document.getElementById('tab-quiz').classList.toggle('active', tab==='quiz');
+  if (tab==='quiz') {
+    if (currentWords.length>0) startQuiz();
+    else document.getElementById('quiz-area').innerHTML='<div class="empty-state">先生成一篇故事<br>再來挑戰測驗吧 ♡</div>';
+  }
+}
+
+function saveKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    document.getElementById('key-status').textContent = '格式不對，應以 sk-ant- 開頭';
+    document.getElementById('key-status').className = 'key-status'; return;
+  }
+  localStorage.setItem('anthropic_key', key);
+  document.getElementById('key-status').textContent = '✓ 已儲存';
+  document.getElementById('key-status').className = 'key-status ok';
+}
+
+async function generateStory() {
+  const apiKey = localStorage.getItem('anthropic_key') || document.getElementById('api-key-input').value.trim();
+  if (!apiKey) { alert('請先輸入並儲存 Anthropic API Key！'); return; }
+  const hero = document.getElementById('hero-type').value;
+  const level = document.getElementById('level').value;
+  const btn = document.getElementById('gen-btn');
+  const area = document.getElementById('story-area');
+  btn.disabled = true;
+  area.innerHTML = `<div class="loading-state">正在召喚${hero}<span class="loading-dots"></span></div>`;
+
+  let prompt;
+  if (currentLang === 'en') {
+    const levelMap = {'初級':'elementary (A2-B1)','中級':'intermediate (B1-B2)','進階':'advanced (C1)'};
+    const domain = document.getElementById('domain').value;
+    const domainNote = domain ? `重要：8個英文單字必須都是「${domain}」專業領域的術語。` : '使用日常通用詞彙。';
+    prompt = `你是台灣言情小說AI。用繁體中文寫180-220字霸總故事，主角「${hero}」，場景「${selectedScene}」。
+嵌入8個英文單字（${levelMap[level]}）。${domainNote}
+格式：[WORD](中文解釋) 嵌入文中。
+最後輸出：
+WORDS: w1,w2,w3,w4,w5,w6,w7,w8
+DEFS: 定義1|定義2|定義3|定義4|定義5|定義6|定義7|定義8
+只輸出故事+WORDS+DEFS，不要其他說明。`;
+  } else {
+    const jlptMap = {'N5':'N5（約800詞）','N4':'N4（約1500詞）','N3':'N3（約3700詞）'};
+    prompt = `你是台灣言情小說AI。用繁體中文寫180-220字霸總故事，主角「${hero}」，場景「${selectedScene}」。
+在故事中嵌入8個日文單字（${jlptMap[level]}程度）。
+格式：[日文](平假名讀音|中文意思) 嵌入文中。例：[彼女](かのじょ|她)
+故事要有霸總張力，結尾留懸念。
+最後輸出：
+WORDS: 單字1,單字2,單字3,單字4,單字5,單字6,單字7,單字8
+READINGS: 讀音1|讀音2|讀音3|讀音4|讀音5|讀音6|讀音7|讀音8
+DEFS: 定義1|定義2|定義3|定義4|定義5|定義6|定義7|定義8
+JLPT: ${level}
+只輸出故事+WORDS+READINGS+DEFS+JLPT，不要其他說明。`;
+  }
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.status); }
+    const data = await resp.json();
+    const text = data.content[0].text;
+
+    const wordsMatch = text.match(/WORDS:\s*(.+)/);
+    const defsMatch = text.match(/DEFS:\s*(.+)/);
+    const readingsMatch = text.match(/READINGS:\s*(.+)/);
+    const jlptMatch = text.match(/JLPT:\s*(.+)/);
+    let storyText = text.replace(/WORDS:.*/gs, '').trim();
+
+    currentWords = [];
+    if (wordsMatch && defsMatch) {
+      const words = wordsMatch[1].trim().split(',').map(w=>w.trim());
+      const defs = defsMatch[1].trim().split('|').map(d=>d.trim());
+      const readings = readingsMatch ? readingsMatch[1].trim().split('|').map(r=>r.trim()) : [];
+      currentWords = words.map((w,i) => ({word:w, def:defs[i]||'', reading:readings[i]||''}));
+    }
+
+    let htmlStory, plainStory;
+    if (currentLang === 'en') {
+      plainStory = storyText.replace(/\[([A-Za-z]+)\]\(([^)]+)\)/g, (_,w,d) => `${w}（${d}）`);
+      htmlStory = storyText.replace(/\[([A-Za-z]+)\]\(([^)]+)\)/g, (_,w,d) =>
+        `<em class="word-pill">${w}</em><span class="word-def">（${d}）</span>`);
+    } else {
+      plainStory = storyText.replace(/\[([^\]]+)\]\(([^|]+)\|([^)]+)\)/g, (_,w,r,d) => `${w}（${r}・${d}）`);
+      htmlStory = storyText.replace(/\[([^\]]+)\]\(([^|]+)\|([^)]+)\)/g, (_,w,r,d) =>
+        `<em class="word-pill">${w}</em><sup class="word-reading">${r}</sup><span class="word-def">（${d}）</span>`);
+    }
+    currentStoryText = plainStory;
+
+    const jlptLabel = jlptMatch ? `<span class="jlpt-badge">${jlptMatch[1].trim()}</span>` : '';
+    const vocabHtml = currentWords.length > 0 ? `
+      <div class="vocab-list">
+        <div class="vocab-title">▸ 本篇單字表 ${jlptLabel}</div>
+        <div class="vocab-grid">${currentWords.map(w=>`
+          <div class="vocab-card">
+            <div class="vocab-en">${w.word}</div>
+            ${w.reading?`<div class="vocab-reading">${w.reading}</div>`:''}
+            <div class="vocab-zh">${w.def}</div>
+          </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    area.innerHTML = `<div class="story-box">${htmlStory}</div>${vocabHtml}
+      <div class="notion-area">
+        <div class="notion-hint">📋 複製純文字版本，貼入 Notion 單字庫</div>
+        <button class="btn-copy" onclick="copyForNotion()">複製到 Notion</button>
+      </div>`;
+  } catch(e) {
+    area.innerHTML = `<div class="empty-state">生成失敗：${e.message}<br>請確認 API Key 正確 ✦</div>`;
+  }
+  btn.disabled = false;
+}
+
+function copyForNotion() {
+  const hero = document.getElementById('hero-type').value;
+  const level = document.getElementById('level').value;
+  const domain = currentLang==='en' ? document.getElementById('domain').value : '';
+  const date = new Date().toLocaleDateString('zh-TW');
+  const langLabel = currentLang==='en'?'英文':'日文';
+  let text = `# 霸總文背單字 — ${date} (${langLabel})\n`;
+  text += `**類型：** ${hero}　**場景：** ${selectedScene}　**程度：** ${level}`;
+  if (domain) text += `　**領域：** ${domain}`;
+  text += `\n\n---\n\n${currentStoryText}\n\n---\n\n## 單字表\n\n`;
+  currentWords.forEach(w => {
+    text += currentLang==='en'
+      ? `- **${w.word}** — ${w.def}\n`
+      : `- **${w.word}**　${w.reading?w.reading+'　':''}${w.def}\n`;
+  });
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent='✓ 已複製！'; btn.style.color='#7ddb7d';
+    setTimeout(()=>{btn.textContent='複製到 Notion';btn.style.color='';},2000);
+  }).catch(()=>{ alert('複製失敗，請手動選取文字複製。'); });
+}
+
+function startQuiz() { quizIndex=0; quizScore=0; showQuizQuestion(); }
+
+function showQuizQuestion() {
+  const area = document.getElementById('quiz-area');
+  if (quizIndex >= currentWords.length) {
+    area.innerHTML = `<div class="quiz-mode"><div class="quiz-card">
+      <div style="font-size:52px;margin-bottom:1rem">🎉</div>
+      <div style="font-family:'Noto Serif TC',serif;font-size:20px;color:#f0c87a;margin-bottom:.8rem">測驗完成！</div>
+      <div style="color:#9c6a7a;font-size:15px;margin-bottom:2rem">
+        ${currentWords.length} 題答對 ${quizScore} 題<br>
+        <span style="color:${quizScore===currentWords.length?'#7ddb7d':'#f0c87a'}">
+          ${quizScore===currentWords.length?'滿分！霸總對你另眼相看了 ✨':'繼續加油，霸總在等你 ♡'}
+        </span>
+      </div>
+      <button class="btn-generate" onclick="startQuiz()">再練一次</button>
+    </div></div>`; return;
+  }
+  const current = currentWords[quizIndex];
+  const others = currentWords.filter((_,i)=>i!==quizIndex);
+  const wrongOptions = others.sort(()=>Math.random()-.5).slice(0,3).map(w=>w.def);
+  const allOptions = [...wrongOptions, current.def].sort(()=>Math.random()-.5);
+  const pct = Math.round((quizIndex/currentWords.length)*100);
+  area.innerHTML = `
+    <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+    <div class="quiz-score">${quizIndex+1} / ${currentWords.length} 題　✓ ${quizScore}</div>
+    <div class="quiz-mode"><div class="quiz-card">
+      <div class="quiz-word">${current.word}</div>
+      ${current.reading?`<div class="quiz-reading">${current.reading}</div>`:''}
+      <div class="quiz-context">這個單字的中文意思是？</div>
+      <div class="quiz-options">
+        ${allOptions.map(opt=>`<button class="quiz-btn" onclick="checkAnswer(this,'${opt.replace(/'/g,"\\'")}','${current.def.replace(/'/g,"\\'")}')">
+          ${opt}</button>`).join('')}
+      </div>
+    </div></div>`;
+}
+
+function checkAnswer(btn, chosen, correct) {
+  document.querySelectorAll('.quiz-btn').forEach(b=>{b.onclick=null;b.style.cursor='default';});
+  if (chosen===correct) { btn.classList.add('correct'); quizScore++; }
+  else {
+    btn.classList.add('wrong');
+    document.querySelectorAll('.quiz-btn').forEach(b=>{if(b.textContent.trim()===correct)b.classList.add('correct');});
+  }
+  setTimeout(()=>{quizIndex++;showQuizQuestion();},1300);
+}
+</script>
+</body>
+</html>

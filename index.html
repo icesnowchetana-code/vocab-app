@@ -432,7 +432,7 @@ async function generateEpisode() {
     const domain = document.getElementById('domain').value;
     const domainNote = domain ? `單字必須是「${domain}」專業領域術語。` : '';
     const historyNote = storyHistory.length > 0
-      ? `\n【前情提要】${storyHistory.join(' → ')}\n請接續這個劇情繼續寫，保持人物個性一致。`
+      ? `\n【前情提要】${storyHistory.slice(-2).join(' → ')}\n請接續這個劇情繼續寫，保持人物個性一致。`
       : `\n請創造兩個有名字的主角（霸總男主＋女主），並在故事中自然帶出名字。`;
     const nameNote = heroName ? `\n男主角名字：${heroName}，女主角名字：${heroineName}` : '';
 
@@ -458,7 +458,7 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
   } else {
     const jlptMap = {'N5':'N5（約800詞）','N4':'N4（約1500詞）','N3':'N3（約3700詞）'};
     const historyNote = storyHistory.length > 0
-      ? `\n【前情提要】${storyHistory.join(' → ')}\n請接續劇情繼續寫。`
+      ? `\n【前情提要】${storyHistory.slice(-2).join(' → ')}\n請接續劇情繼續寫。`
       : `\n請創造兩個有名字的主角並在故事中帶出。`;
     const nameNote = heroName ? `\n男主角：${heroName}，女主角：${heroineName}` : '';
 

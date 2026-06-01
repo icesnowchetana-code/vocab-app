@@ -327,7 +327,60 @@ window.addEventListener('load', () => {
     document.getElementById('key-status').textContent = '✓ 已載入儲存的 Key';
     document.getElementById('key-status').className = 'key-status ok';
   }
+  restoreStory();
 });
+
+
+// ===== 自動存檔 =====
+function saveStory() {
+  const area = document.getElementById('story-area');
+  localStorage.setItem('story_html', area.innerHTML);
+  localStorage.setItem('story_episode', episodeCount);
+  localStorage.setItem('story_words', JSON.stringify(allWords));
+  localStorage.setItem('story_history', JSON.stringify(storyHistory));
+  localStorage.setItem('story_hero', heroName);
+  localStorage.setItem('story_heroine', heroineName);
+  localStorage.setItem('story_lang', currentLang);
+  localStorage.setItem('story_scene', selectedScene);
+}
+
+function restoreStory() {
+  const savedHtml = localStorage.getItem('story_html');
+  const savedEp = localStorage.getItem('story_episode');
+  if (!savedHtml || !savedEp || savedEp === '0') return;
+
+  episodeCount = parseInt(savedEp);
+  allWords = JSON.parse(localStorage.getItem('story_words') || '[]');
+  storyHistory = JSON.parse(localStorage.getItem('story_history') || '[]');
+  heroName = localStorage.getItem('story_hero') || '';
+  heroineName = localStorage.getItem('story_heroine') || '';
+  currentLang = localStorage.getItem('story_lang') || 'en';
+  selectedScene = localStorage.getItem('story_scene') || '商業競爭、辦公室';
+
+  // 切換語言 UI
+  setLang(currentLang);
+
+  // 還原故事畫面
+  const area = document.getElementById('story-area');
+  area.innerHTML = savedHtml;
+
+  // 重新綁定「繼續下一集」按鈕
+  const nextBtn = document.getElementById('next-ep-btn');
+  if (nextBtn) {
+    nextBtn.textContent = `▶ 繼續第 ${episodeCount+1} 集`;
+    nextBtn.onclick = () => { nextBtn.remove(); generateEpisode(); };
+  }
+
+  // 顯示 episode bar
+  document.getElementById('episode-bar').classList.add('visible');
+  document.getElementById('ep-label').textContent = `已追 ${episodeCount} 集`;
+  document.getElementById('ep-title-display').textContent = `共 ${allWords.length} 個單字`;
+  document.getElementById('controls-section').style.display = 'none';
+}
+
+function clearSavedStory() {
+  ['story_html','story_episode','story_words','story_history','story_hero','story_heroine','story_lang','story_scene'].forEach(k => localStorage.removeItem(k));
+}
 
 function saveKey() {
   const key = document.getElementById('api-key-input').value.trim();
@@ -385,6 +438,7 @@ function switchTab(tab) {
 }
 
 function resetStory() {
+  clearSavedStory();
   episodeCount = 0; allWords = []; storyHistory = [];
   storyStarted = false; heroName = ''; heroineName = '';
   document.getElementById('story-area').innerHTML = '<div class="empty-state">選擇霸總類型與場景<br>點擊「開始第一集」追劇 ✨</div>';
@@ -492,7 +546,7 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
         'Content-Type':'application/json','x-api-key':apiKey,
         'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'
       },
-      body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:2000, messages:[{role:'user',content:prompt}]})
+      body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:2500, messages:[{role:'user',content:prompt}]})
     });
     if (!resp.ok) { const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
     const data = await resp.json();
@@ -594,6 +648,7 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
     document.getElementById('controls-section').style.display = 'none';
 
     area.scrollTop = area.scrollHeight;
+    saveStory();
     genBtn.disabled = false;
 
   } catch(e) {
@@ -689,4 +744,3 @@ function checkAnswer(btn, chosen, correct) {
 </script>
 </body>
 </html>
-

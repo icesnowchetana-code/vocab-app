@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 跟手機主畫面圖示同一個樣子：米色底、咖啡色皇冠 -->
+  <rect width="64" height="64" rx="14" fill="#f5ede0"/>
+  <g fill="#8b5e2a">
+    <!-- 皇冠主體：五個尖角 -->
+    <path d="M17 41 L12 21 L22 31 L26 17 L32 30 L38 17 L42 31 L52 21 L47 41 Z"/>
+    <!-- 尖角上的圓珠 -->
+    <circle cx="12" cy="19" r="3.2"/>
+    <circle cx="26" cy="15" r="3.2"/>
+    <circle cx="32" cy="12.5" r="3.2"/>
+    <circle cx="38" cy="15" r="3.2"/>
+    <circle cx="52" cy="19" r="3.2"/>
+    <path d="M30.6 14 h2.8 v16 h-2.8z"/>
+    <!-- 底座兩條橫帶 -->
+    <rect x="17" y="43.5" width="30" height="3.2" rx="1"/>
+    <rect x="16" y="48.5" width="32" height="4.5" rx="1.5"/>
+  </g>
+</svg>

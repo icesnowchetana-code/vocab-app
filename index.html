@@ -341,7 +341,7 @@ let heroName = '', heroineName = '';
 const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 const API_BASE = IS_LOCAL
   ? 'http://127.0.0.1:8799'
-  : 'https://WORKER_URL_PLACEHOLDER'; // 第 4 階段部署後填入正式 Worker 網址
+  : 'https://vocab-app-api.vocab-app-api.workers.dev';
 
 window.addEventListener('load', () => {
   // 舊版把 Anthropic API key 存在瀏覽器裡，現在用不到了，順手清掉

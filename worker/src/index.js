@@ -109,6 +109,14 @@ const VOCAB_DB = {
   jp: { dataSourceId: '370f4fed-cfcc-81a7-8ac8-000baebf89c6', defField: '意思', hasReading: true },
 };
 
+// 劇集庫：每看完一集建一頁（整集劇情＋這一集的單字），並連回單字庫
+const EPISODE_DB = {
+  dataSourceId: '41ff4fed-cfcc-81dd-b2ac-000be9842ada',
+  relationField: { en: '英文單字', jp: '日文單字' },
+  langName: { en: '英文', jp: '日文' },
+};
+const MAX_STORY_CHARS = 12000;
+
 const SOURCE_NAME = '霸總單字';
 const POS_OPTIONS =['名詞', '動詞', '形容詞', '副詞', '片語', '其他'];
 const EN_LEVEL_MAP = { '初級': '初級', '中級': '中級', '進階': '高級', '高級': '高級' };
@@ -190,7 +198,7 @@ async function upsertWord(env, db, lang, w, shared) {
       }
     }
     await notion(env, 'PATCH', `/pages/${existing.id}`, { properties });
-    return 'updated';
+    return { result: 'updated', id: existing.id };
   }
 
   const level = lang === 'en'
@@ -214,11 +222,79 @@ async function upsertWord(env, db, lang, w, shared) {
   if (level) properties['程度'] = { select: { name: level } };
   if (db.hasReading) properties['讀音'] = { rich_text: richText(w.reading) };
 
-  await notion(env, 'POST', '/pages', {
+  const page = await notion(env, 'POST', '/pages', {
     parent: { type: 'data_source_id', data_source_id: db.dataSourceId },
     properties,
   });
-  return 'created';
+  return { result: 'created', id: page.id };
+}
+
+// ===== 劇集頁 =====
+
+const textRun = (content, bold) => ({
+  type: 'text',
+  text: { content: content.slice(0, 2000) },
+  ...(bold ? { annotations: { bold: true } } : {}),
+});
+
+// 把一行劇情轉成 Notion 文字：[單字](意思) 或 [單字](讀音|意思) → 粗體單字＋（括號說明）
+function storyLineToRichText(line) {
+  const runs = [];
+  const re = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let last = 0, m;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) runs.push(textRun(line.slice(last, m.index)));
+    runs.push(textRun(m[1], true));
+    runs.push(textRun(`（${m[2].split('|').map((x) => x.trim()).join('・')}）`));
+    last = re.lastIndex;
+  }
+  if (last < line.length) runs.push(textRun(line.slice(last)));
+  return runs.slice(0, 100);
+}
+
+function buildEpisodeBlocks(story, cliffhanger, words) {
+  const blocks = [];
+  const block = (type, rich_text) => ({ object: 'block', type, [type]: { rich_text } });
+
+  for (const raw of story.split('\n')) {
+    let line = raw.trim().replace(/\*\*/g, '');
+    if (!line || /^-{3,}$/.test(line)) continue;
+    const heading = line.match(/^#{1,6}\s*(.+)$/);
+    if (heading) { blocks.push(block('heading_3', [textRun(heading[1])])); continue; }
+    blocks.push(block('paragraph', storyLineToRichText(line)));
+    if (blocks.length >= 70) break;
+  }
+  if (cliffhanger) blocks.push(block('quote', [textRun(`⋯ ${cliffhanger} ⋯`)]));
+
+  blocks.push({ object: 'block', type: 'divider', divider: {} });
+  blocks.push(block('heading_3', [textRun('這一集的單字')]));
+  for (const w of words) {
+    const runs = [textRun(w.word, true)];
+    if (w.reading) runs.push(textRun(`（${w.reading}）`));
+    runs.push(textRun(`　${[w.pos, w.def].filter(Boolean).join('　')}`));
+    blocks.push(block('bulleted_list_item', runs));
+  }
+  return blocks.slice(0, 100);
+}
+
+async function createEpisodePage(env, lang, ep, words, wordPageIds) {
+  const properties = {
+    '劇集': { title: richText(ep.title) },
+    '語言': { select: { name: EPISODE_DB.langName[lang] } },
+    '霸總類型': { rich_text: richText(ep.heroType) },
+    '場景': { rich_text: richText(ep.scene) },
+    '集數': { number: ep.number },
+    '程度': { rich_text: richText(ep.level) },
+    '日期': { date: { start: ep.today } },
+    '單字數': { number: words.length },
+    [EPISODE_DB.relationField[lang]]: { relation: wordPageIds.map((id) => ({ id })) },
+  };
+  const page = await notion(env, 'POST', '/pages', {
+    parent: { type: 'data_source_id', data_source_id: EPISODE_DB.dataSourceId },
+    properties,
+    children: buildEpisodeBlocks(ep.story, ep.cliffhanger, words),
+  });
+  return page.url;
 }
 
 async function handleWords(request, env, origin) {
@@ -275,18 +351,42 @@ async function handleWords(request, env, origin) {
 
   let created = 0, updated = 0;
   const failed = [];
+  const wordPageIds = [];
   // 一個一個來，避免超過 Notion 的速率限制
   for (const w of words) {
     try {
-      const result = await upsertWord(env, db, body.lang, w, shared);
+      const { result, id } = await upsertWord(env, db, body.lang, w, shared);
       if (result === 'created') created++; else updated++;
+      wordPageIds.push(id);
     } catch (e) {
       failed.push({ word: w.word, error: e.message });
     }
   }
 
+  // 有帶劇情才建劇集頁。這一步失敗不影響已經寫好的單字。
+  let episodePage = null, episodeError = null;
+  const story = typeof body.story === 'string' ? body.story.trim().slice(0, MAX_STORY_CHARS) : '';
+  if (story && created + updated > 0) {
+    const number = parseInt(body.episode, 10) || 1;
+    const epTitle = clip(body.title, 60);
+    try {
+      episodePage = await createEpisodePage(env, body.lang, {
+        title: [clip(body.heroType, 20), `第${number}集`, epTitle].filter(Boolean).join('｜'),
+        heroType: clip(body.heroType, 20),
+        scene: clip(body.scene, 30),
+        level: shared.level,
+        number,
+        today: shared.today,
+        story,
+        cliffhanger: clip(body.cliffhanger, 300),
+      }, words, wordPageIds);
+    } catch (e) {
+      episodeError = e.message;
+    }
+  }
+
   const status = failed.length && created + updated === 0 ? 502 : 200;
-  return json({ created, updated, failed }, status, origin);
+  return json({ created, updated, failed, episodePage, episodeError }, status, origin);
 }
 
 export default {

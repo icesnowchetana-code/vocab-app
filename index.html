@@ -378,8 +378,10 @@ async function syncToNotion(epWords, epDiv, meta) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error || resp.status);
-    const failNote = data.failed && data.failed.length ? `、失敗 ${data.failed.length} 個` : '';
-    status.textContent = `✓ 已存入 Notion：新增 ${data.created} 個、更新 ${data.updated} 個${failNote}`;
+    let failNote = data.failed && data.failed.length ? `、失敗 ${data.failed.length} 個` : '';
+    const epNote = data.episodePage ? '，劇集頁已建立' : '';
+    if (data.episodeError) failNote += `（劇集頁沒建成：${data.episodeError}）`;
+    status.textContent = `✓ 已存入 Notion：新增 ${data.created} 個、更新 ${data.updated} 個${epNote}${failNote}`;
     status.className = 'notion-status ' + (failNote ? 'fail' : 'ok');
   } catch (e) {
     status.textContent = `存入 Notion 失敗：${e.message}`;
@@ -571,7 +573,7 @@ async function generateEpisode() {
 1. 故事長度約600-800字，情節豐富有起伏
 2. 嵌入8個英文單字（${levelMap[level]}程度）${domainNote}
 3. 已使用過的單字不要重複：${usedWords||'無'}
-4. 格式：[WORD](中文解釋) 嵌入文中
+4. 格式：[WORD](中文解釋) 嵌入文中。故事本文一律用繁體中文寫，只有這8個單字是英文；單字用原形，[ ] 後面不可再接 ed、d、s、ing 等字尾
 5. 結尾必須有強烈懸念，讓讀者想追下一集
 6. 最後輸出：
 EPISODE_TITLE: ${epTitle}
@@ -751,6 +753,7 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
     // 開關有開才會寫入 Notion；不等它完成，不擋住閱讀
     syncToNotion(epWords, epDiv, {
       lang: currentLang, level, heroType: hero, scene: selectedScene, episode: episodeCount,
+      title: epTitle, story: storyText, cliffhanger: cliffMatch ? cliffMatch[1].trim() : '',
       domain: currentLang === 'en' ? document.getElementById('domain').value : ''
     });
 

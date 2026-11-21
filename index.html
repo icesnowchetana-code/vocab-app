@@ -105,6 +105,19 @@ body {
 .btn-save-key:hover { background: #8b5e2a; color: #f5ede0; }
 .key-status { font-size: 13px; margin-top: 6px; color: #9c7a50; }
 .key-status.ok { color: #4a7a4a; }
+.notion-toggle {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid #c4a88244; font-size: 13px; color: #7a6048;
+  font-family: 'Noto Serif TC', serif; cursor: pointer; line-height: 1.5;
+}
+.notion-toggle input { width: 18px; height: 18px; accent-color: #8b5e2a; flex-shrink: 0; }
+.notion-status {
+  margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 14px;
+  font-family: 'Noto Serif TC', serif; background: #ede0ce; color: #9c7a50;
+  border: 1px solid #c4a88244; text-align: center;
+}
+.notion-status.ok { color: #4a7a4a; }
+.notion-status.fail { color: #9b4a4a; }
 
 /* Episode bar */
 .episode-bar {
@@ -232,12 +245,16 @@ body {
 <div id="tab-story" class="tab-content active">
   <div class="controls" id="controls-section">
     <div class="api-section">
-      <div class="api-label">🔑 Anthropic API Key（儲存於本機，不上傳）</div>
+      <div class="api-label">🔑 通關密碼（只存在這台裝置）</div>
       <div class="api-row">
-        <input type="password" class="api-input" id="api-key-input" placeholder="sk-ant-..." />
-        <button class="btn-save-key" onclick="saveKey()">儲存</button>
+        <input type="password" class="api-input" id="app-pass-input" placeholder="輸入通關密碼" autocomplete="off" />
+        <button class="btn-save-key" onclick="savePass()">儲存</button>
       </div>
-      <div class="key-status" id="key-status">尚未設定 API Key</div>
+      <div class="key-status" id="key-status">尚未設定通關密碼</div>
+      <label class="notion-toggle">
+        <input type="checkbox" id="notion-sync" onchange="saveNotionSync()" />
+        <span>看完每集自動存入 Notion 單字庫（只在自己的裝置開啟）</span>
+      </label>
     </div>
     <div class="control-row">
       <select class="styled-select" id="hero-type">
@@ -320,15 +337,56 @@ let quizIndex = 0, quizScore = 0;
 let storyStarted = false;
 let heroName = '', heroineName = '';
 
+// 後端（Cloudflare Worker）位址：本機開發時打本機，其餘打正式網址
+const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const API_BASE = IS_LOCAL
+  ? 'http://127.0.0.1:8799'
+  : 'https://WORKER_URL_PLACEHOLDER'; // 第 4 階段部署後填入正式 Worker 網址
+
 window.addEventListener('load', () => {
-  const saved = localStorage.getItem('anthropic_key');
+  // 舊版把 Anthropic API key 存在瀏覽器裡，現在用不到了，順手清掉
+  localStorage.removeItem('anthropic_key');
+  const saved = localStorage.getItem('app_pass');
   if (saved) {
-    document.getElementById('api-key-input').value = saved;
-    document.getElementById('key-status').textContent = '✓ 已載入儲存的 Key';
+    document.getElementById('app-pass-input').value = saved;
+    document.getElementById('key-status').textContent = '✓ 已載入儲存的通關密碼';
     document.getElementById('key-status').className = 'key-status ok';
   }
+  document.getElementById('notion-sync').checked = localStorage.getItem('notion_sync') === '1';
   restoreStory();
 });
+
+// 「存入 Notion」開關：預設關閉，只記在這台裝置
+function saveNotionSync() {
+  localStorage.setItem('notion_sync', document.getElementById('notion-sync').checked ? '1' : '0');
+}
+
+// 把這一集的單字送到後端寫入 Notion，並在該集下方顯示結果
+async function syncToNotion(epWords, epDiv, meta) {
+  if (localStorage.getItem('notion_sync') !== '1' || epWords.length === 0) return;
+  const status = document.createElement('div');
+  status.className = 'notion-status';
+  status.textContent = '正在存入 Notion…';
+  epDiv.appendChild(status);
+  try {
+    const resp = await fetch(`${API_BASE}/api/words`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-App-Pass': localStorage.getItem('app_pass') || '' },
+      body: JSON.stringify({ ...meta, words: epWords.map(w => ({
+        word: w.word, def: w.def, reading: w.reading, pos: w.pos, example: w.example, level: w.level
+      })) })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || resp.status);
+    const failNote = data.failed && data.failed.length ? `、失敗 ${data.failed.length} 個` : '';
+    status.textContent = `✓ 已存入 Notion：新增 ${data.created} 個、更新 ${data.updated} 個${failNote}`;
+    status.className = 'notion-status ' + (failNote ? 'fail' : 'ok');
+  } catch (e) {
+    status.textContent = `存入 Notion 失敗：${e.message}`;
+    status.className = 'notion-status fail';
+  }
+  saveStory();
+}
 
 
 // ===== 自動存檔 =====
@@ -342,6 +400,9 @@ function saveStory() {
   localStorage.setItem('story_heroine', heroineName);
   localStorage.setItem('story_lang', currentLang);
   localStorage.setItem('story_scene', selectedScene);
+  localStorage.setItem('story_hero_type', document.getElementById('hero-type').value);
+  localStorage.setItem('story_level', document.getElementById('level').value);
+  localStorage.setItem('story_domain', document.getElementById('domain').value);
 }
 
 function restoreStory() {
@@ -357,8 +418,15 @@ function restoreStory() {
   currentLang = localStorage.getItem('story_lang') || 'en';
   selectedScene = localStorage.getItem('story_scene') || '商業競爭、辦公室';
 
-  // 切換語言 UI
-  setLang(currentLang);
+  // 切換語言 UI（不能用 setLang，它會把存檔清掉）
+  applyLangUI(currentLang);
+
+  // 還原霸總類型／程度／領域，下一集才會接續同一個設定
+  [['hero-type','story_hero_type'],['level','story_level'],['domain','story_domain']].forEach(([id,key]) => {
+    const v = localStorage.getItem(key);
+    const el = document.getElementById(id);
+    if (v !== null && [...el.options].some(o => o.value === v)) el.value = v;
+  });
 
   // 還原故事畫面
   const area = document.getElementById('story-area');
@@ -379,21 +447,28 @@ function restoreStory() {
 }
 
 function clearSavedStory() {
-  ['story_html','story_episode','story_words','story_history','story_hero','story_heroine','story_lang','story_scene'].forEach(k => localStorage.removeItem(k));
+  ['story_html','story_episode','story_words','story_history','story_hero','story_heroine','story_lang','story_scene','story_hero_type','story_level','story_domain'].forEach(k => localStorage.removeItem(k));
 }
 
-function saveKey() {
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key.startsWith('sk-ant-')) {
-    document.getElementById('key-status').textContent = '格式不對，應以 sk-ant- 開頭';
+function savePass() {
+  const pass = document.getElementById('app-pass-input').value.trim();
+  if (!pass) {
+    document.getElementById('key-status').textContent = '請輸入通關密碼';
     document.getElementById('key-status').className = 'key-status'; return;
   }
-  localStorage.setItem('anthropic_key', key);
+  localStorage.setItem('app_pass', pass);
   document.getElementById('key-status').textContent = '✓ 已儲存';
   document.getElementById('key-status').className = 'key-status ok';
 }
 
+// 使用者按語言按鈕：切換畫面並開新故事
 function setLang(lang) {
+  applyLangUI(lang);
+  resetStory();
+}
+
+// 只切換畫面上的語言顯示，不動故事存檔（還原存檔時用這個）
+function applyLangUI(lang) {
   currentLang = lang;
   document.getElementById('btn-en').classList.toggle('active', lang==='en');
   document.getElementById('btn-jp').classList.toggle('active', lang==='jp');
@@ -414,7 +489,6 @@ function setLang(lang) {
       <option value="N4" selected>N4（目前程度）</option>
       <option value="N3">N3 挑戰</option>`;
   }
-  resetStory();
 }
 
 document.querySelectorAll('.scene-tag').forEach(tag => {
@@ -455,8 +529,8 @@ function startNewStory() {
 }
 
 async function generateEpisode() {
-  const apiKey = localStorage.getItem('anthropic_key') || document.getElementById('api-key-input').value.trim();
-  if (!apiKey) { alert('請先輸入並儲存 Anthropic API Key！'); return; }
+  const appPass = localStorage.getItem('app_pass') || document.getElementById('app-pass-input').value.trim();
+  if (!appPass) { alert('請先輸入並儲存通關密碼！'); return; }
 
   const hero = document.getElementById('hero-type').value;
   const level = document.getElementById('level').value;
@@ -506,7 +580,14 @@ HEROINE_NAME: 女主角中文名字
 SUMMARY: 本集劇情20字摘要
 WORDS: w1,w2,w3,w4,w5,w6,w7,w8
 DEFS: 定義1|定義2|定義3|定義4|定義5|定義6|定義7|定義8
+POS: 詞性1|詞性2|詞性3|詞性4|詞性5|詞性6|詞性7|詞性8
+EXAMPLES: 例句1|例句2|例句3|例句4|例句5|例句6|例句7|例句8
 CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
+
+標記行規則：
+- 每個標記各佔一行，順序與 WORDS 一一對應
+- POS 每個只能填：名詞、動詞、形容詞、副詞、片語、其他
+- EXAMPLES 填故事中包含該單字的那一句原文（保留英文單字，不要 [ ]( ) 標記），後面用全形括號附上整句的中文翻譯；例句內不可出現 | 符號
 
 只輸出故事內容+以上標記行，不要其他說明。`;
   } else {
@@ -533,24 +614,35 @@ SUMMARY: 本集劇情20字摘要
 WORDS: 單字1,單字2,單字3,單字4,單字5,單字6,單字7,單字8
 READINGS: 讀音1|讀音2|讀音3|讀音4|讀音5|讀音6|讀音7|讀音8
 DEFS: 定義1|定義2|定義3|定義4|定義5|定義6|定義7|定義8
+POS: 詞性1|詞性2|詞性3|詞性4|詞性5|詞性6|詞性7|詞性8
+LEVELS: 級數1|級數2|級數3|級數4|級數5|級數6|級數7|級數8
+EXAMPLES: 例句1|例句2|例句3|例句4|例句5|例句6|例句7|例句8
 JLPT: ${level}
 CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
+
+標記行規則：
+- 每個標記各佔一行，順序與 WORDS 一一對應
+- POS 每個只能填：名詞、動詞、形容詞、副詞、片語、其他
+- LEVELS 填每個單字各自實際的 JLPT 級數，只能填 N5、N4、N3、N2、N1
+- EXAMPLES 填故事中包含該單字的那一句原文（保留日文單字，不要 [ ]( ) 標記），後面用全形括號附上整句的中文翻譯；例句內不可出現 | 符號
 
 只輸出故事內容+以上標記行，不要其他說明。`;
   }
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    // 模型與字數上限由後端決定，這裡只送出 prompt 和通關密碼
+    const resp = await fetch(`${API_BASE}/api/story`, {
       method: 'POST',
-      headers: {
-        'Content-Type':'application/json','x-api-key':apiKey,
-        'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'
-      },
-      body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:2500, messages:[{role:'user',content:prompt}]})
+      headers: { 'Content-Type':'application/json', 'X-App-Pass':appPass },
+      body: JSON.stringify({ prompt })
     });
-    if (!resp.ok) { const e=await resp.json(); throw new Error(e.error?.message||resp.status); }
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => ({}));
+      if (resp.status === 401) throw new Error('通關密碼錯誤，請回到設定重新輸入');
+      throw new Error(e.error || resp.status);
+    }
     const data = await resp.json();
-    const text = data.content[0].text;
+    const text = data.text;
 
     // Parse metadata
     const wordsMatch = text.match(/WORDS:\s*(.+)/);
@@ -577,14 +669,19 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
       const words = wordsMatch[1].trim().split(',').map(w=>w.trim());
       const defs = defsMatch[1].trim().split('|').map(d=>d.trim());
       const readings = readingsMatch ? readingsMatch[1].trim().split('|').map(r=>r.trim()) : [];
-      epWords = words.map((w,i)=>({word:w, def:defs[i]||'', reading:readings[i]||'', ep:episodeCount}));
+      const splitLine = (re) => { const m = text.match(re); return m ? m[1].trim().split('|').map(s=>s.trim()) : []; };
+      const poss = splitLine(/^POS:\s*(.+)/m);
+      const examples = splitLine(/^EXAMPLES:\s*(.+)/m);
+      const levels = splitLine(/^LEVELS:\s*(.+)/m);
+      epWords = words.map((w,i)=>({word:w, def:defs[i]||'', reading:readings[i]||'', ep:episodeCount,
+        pos:poss[i]||'', example:examples[i]||'', level:levels[i]||''}));
       allWords = [...allWords, ...epWords];
     }
 
     // Format story HTML
     let htmlStory;
     if (currentLang==='en') {
-      htmlStory = storyText.replace(/\[([A-Za-z]+)\]\(([^)]+)\)/g, (_,w,d) =>
+      htmlStory = storyText.replace(/\[([A-Za-z][A-Za-z '\-]*)\]\(([^)]+)\)/g, (_,w,d) =>
         `<em class="word-pill">${w}</em><span class="word-def">（${d}）</span>`);
     } else {
       htmlStory = storyText.replace(/\[([^\]]+)\]\(([^|]+)\|([^)]+)\)/g, (_,w,r,d) =>
@@ -650,6 +747,12 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
     area.scrollTop = area.scrollHeight;
     saveStory();
     genBtn.disabled = false;
+
+    // 開關有開才會寫入 Notion；不等它完成，不擋住閱讀
+    syncToNotion(epWords, epDiv, {
+      lang: currentLang, level, heroType: hero, scene: selectedScene, episode: episodeCount,
+      domain: currentLang === 'en' ? document.getElementById('domain').value : ''
+    });
 
   } catch(e) {
     area.removeChild(loadingDiv);

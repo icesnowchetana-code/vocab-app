@@ -1,0 +1,6 @@
+# 複製這個檔案成 .dev.vars，再填入真正的值。
+# .dev.vars 只留在你的電腦，不會進 Git。
+ANTHROPIC_API_KEY=
+NOTION_TOKEN=
+APP_PASS=
+ALLOW_LOCALHOST=true

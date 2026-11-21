@@ -1,0 +1,8 @@
+# 金鑰與本機設定：絕對不能進 Git
+.dev.vars
+.env
+.env.*
+
+# 套件與暫存
+node_modules/
+.wrangler/

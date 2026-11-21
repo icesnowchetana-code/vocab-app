@@ -1,0 +1,7 @@
+name = "vocab-app-api"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+# 金鑰不寫在這裡。
+# 本機：放 worker/.dev.vars（已列入 .gitignore）
+# 正式：用 `npx wrangler secret put 名稱` 設定

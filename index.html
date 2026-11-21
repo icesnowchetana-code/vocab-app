@@ -359,11 +359,94 @@ window.addEventListener('load', () => {
 // 「存入 Notion」開關：預設關閉，只記在這台裝置
 function saveNotionSync() {
   localStorage.setItem('notion_sync', document.getElementById('notion-sync').checked ? '1' : '0');
+  ensureBackfillButton();
+}
+
+// 這個故事已經存進 Notion 的集數（只記在這台裝置），用來避免重複存
+function getSyncedEps() {
+  try { return JSON.parse(localStorage.getItem('story_synced_eps') || '[]'); } catch { return []; }
+}
+function markSynced(ep) {
+  const eps = getSyncedEps();
+  if (!eps.includes(ep)) { eps.push(ep); localStorage.setItem('story_synced_eps', JSON.stringify(eps)); }
+}
+
+// 「補存到 Notion」按鈕：只有開了 Notion 開關的裝置才會出現
+function ensureBackfillButton() {
+  const old = document.getElementById('backfill-area');
+  if (old) old.remove();
+  const anchor = document.getElementById('notion-btn-area');
+  if (!anchor || localStorage.getItem('notion_sync') !== '1') return;
+  const div = document.createElement('div');
+  div.id = 'backfill-area';
+  div.className = 'notion-area';
+  div.style.marginTop = '1rem';
+  div.innerHTML = `
+    <div class="notion-hint">📺 把這個故事還沒存的集數補存到 Notion（劇集頁＋單字）</div>
+    <button class="btn-copy" id="backfill-btn" onclick="backfillNotion()">補存到 Notion</button>`;
+  anchor.after(div);
+}
+
+// 從畫面上的劇情還原成帶標記的原文：[單字](意思) 或 [單字](讀音|意思)
+function storyTextFromBox(storyBox) {
+  const box = storyBox.cloneNode(true);
+  const cliffEl = box.querySelector('.cliffhanger');
+  const cliffhanger = cliffEl ? cliffEl.textContent.replace(/⋯/g, '').trim() : '';
+  if (cliffEl) cliffEl.remove();
+  box.querySelectorAll('.word-pill').forEach(pill => {
+    let next = pill.nextElementSibling, reading = '', def = '';
+    if (next && next.classList.contains('word-reading')) {
+      reading = next.textContent.trim();
+      const r = next; next = next.nextElementSibling; r.remove();
+    }
+    if (next && next.classList.contains('word-def')) {
+      def = next.textContent.trim().replace(/^（/, '').replace(/）$/, '');
+      next.remove();
+    }
+    pill.replaceWith(document.createTextNode(`[${pill.textContent}](${reading ? reading + '|' : ''}${def})`));
+  });
+  return { story: box.textContent.trim(), cliffhanger };
+}
+
+// 把畫面上還沒存過的集數，一集一集補存到 Notion
+async function backfillNotion() {
+  const btn = document.getElementById('backfill-btn');
+  const synced = getSyncedEps();
+  const todo = [...document.querySelectorAll('#story-area .episode-container')].map(div => {
+    const numEl = div.querySelector('.ep-number');
+    return { div, ep: numEl ? parseInt(numEl.textContent.replace(/\D/g, ''), 10) : 0 };
+  }).filter(x => x.ep > 0 && !synced.includes(x.ep) && allWords.some(w => w.ep === x.ep));
+
+  if (todo.length === 0) { btn.textContent = '✓ 每一集都已存入'; return; }
+  if (!confirm(`要把第 ${todo.map(x => x.ep).join('、')} 集（共 ${todo.length} 集）補存到 Notion 嗎？`)) return;
+
+  btn.disabled = true;
+  let ok = 0;
+  for (const { div, ep } of todo) {
+    btn.textContent = `補存中…第 ${ep} 集`;
+    const titleEl = div.querySelector('.ep-header span:last-child');
+    const { story, cliffhanger } = storyTextFromBox(div.querySelector('.story-box'));
+    const done = await syncToNotion(allWords.filter(w => w.ep === ep), div, {
+      lang: currentLang, level: document.getElementById('level').value,
+      heroType: document.getElementById('hero-type').value, scene: selectedScene, episode: ep,
+      title: titleEl ? titleEl.textContent.trim() : '', story, cliffhanger,
+      domain: currentLang === 'en' ? document.getElementById('domain').value : ''
+    });
+    if (done) ok++;
+  }
+  // syncToNotion 存檔時會把按鈕的中間狀態一起存進去，這裡重畫成乾淨的再存一次
+  ensureBackfillButton();
+  const fresh = document.getElementById('backfill-btn');
+  if (fresh) fresh.textContent = ok === todo.length ? `✓ 已補存 ${ok} 集` : `補存了 ${ok}／${todo.length} 集，可再按一次重試`;
+  saveStory();
 }
 
 // 把這一集的單字送到後端寫入 Notion，並在該集下方顯示結果
 async function syncToNotion(epWords, epDiv, meta) {
-  if (localStorage.getItem('notion_sync') !== '1' || epWords.length === 0) return;
+  if (localStorage.getItem('notion_sync') !== '1' || epWords.length === 0) return false;
+  const oldStatus = epDiv.querySelector('.notion-status');
+  if (oldStatus) oldStatus.remove();
+  let success = false;
   const status = document.createElement('div');
   status.className = 'notion-status';
   status.textContent = '正在存入 Notion…';
@@ -383,11 +466,14 @@ async function syncToNotion(epWords, epDiv, meta) {
     if (data.episodeError) failNote += `（劇集頁沒建成：${data.episodeError}）`;
     status.textContent = `✓ 已存入 Notion：新增 ${data.created} 個、更新 ${data.updated} 個${epNote}${failNote}`;
     status.className = 'notion-status ' + (failNote ? 'fail' : 'ok');
+    // 劇集頁建好就算這一集存過了，之後補存不會再重複
+    if (data.episodePage) { markSynced(meta.episode); success = true; }
   } catch (e) {
     status.textContent = `存入 Notion 失敗：${e.message}`;
     status.className = 'notion-status fail';
   }
   saveStory();
+  return success;
 }
 
 
@@ -446,10 +532,11 @@ function restoreStory() {
   document.getElementById('ep-label').textContent = `已追 ${episodeCount} 集`;
   document.getElementById('ep-title-display').textContent = `共 ${allWords.length} 個單字`;
   document.getElementById('controls-section').style.display = 'none';
+  ensureBackfillButton();
 }
 
 function clearSavedStory() {
-  ['story_html','story_episode','story_words','story_history','story_hero','story_heroine','story_lang','story_scene','story_hero_type','story_level','story_domain'].forEach(k => localStorage.removeItem(k));
+  ['story_html','story_episode','story_words','story_history','story_hero','story_heroine','story_lang','story_scene','story_hero_type','story_level','story_domain','story_synced_eps'].forEach(k => localStorage.removeItem(k));
 }
 
 function savePass() {
@@ -738,6 +825,7 @@ CLIFFHANGER: 一句吊人胃口的結尾旁白（20字內）
         <div class="notion-hint">📋 複製全部劇情＋單字到 Notion</div>
         <button class="btn-copy" onclick="copyForNotion()">複製到 Notion</button>`;
       area.appendChild(notionDiv);
+      ensureBackfillButton();
     }
 
     // Update episode bar
